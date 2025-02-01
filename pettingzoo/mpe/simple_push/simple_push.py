@@ -120,7 +120,10 @@ class Scenario(BaseScenario):
         # random properties for landmarks
         for i, landmark in enumerate(world.landmarks):
             landmark.color = np.array([0.1, 0.1, 0.1])
-            landmark.color[i + 1] += 0.8
+            if i < len(landmark.color) - 1:  # Check if the index exists in the color array
+                landmark.color[i + 1] += 0.8
+            else:
+                landmark.color[-1] += 0.8  # Safely update the last index if i + 1 is out of bounds
             landmark.index = i
         # set goal landmark
         goal = np_random.choice(world.landmarks)
@@ -141,33 +144,68 @@ class Scenario(BaseScenario):
             landmark.state.p_pos = np_random.uniform(-1, +1, world.dim_p)
             landmark.state.p_vel = np.zeros(world.dim_p)
 
-    def reward(self, agent, world):
-        # Agents are rewarded based on minimum agent distance to each landmark
-        return (
-            self.adversary_reward(agent, world)
-            if agent.adversary
-            else self.agent_reward(agent, world)
-        )
-
     def agent_reward(self, agent, world):
-        # the distance to the goal
-        return -np.sqrt(np.sum(np.square(agent.state.p_pos - agent.goal_a.state.p_pos)))
+        # Distance to the landmark (normalized)
+        distance_to_landmark = np.linalg.norm(agent.state.p_pos - agent.goal_a.state.p_pos)
+        landmark_reward = -distance_to_landmark / (distance_to_landmark + 1)
+        
+        # Distance to the adversary (normalized)
+        adversary = next(a for a in world.agents if a.adversary)  # Assuming one adversary
+        distance_to_adversary = np.linalg.norm(agent.state.p_pos - adversary.state.p_pos)
+        adversary_penalty = distance_to_adversary / (distance_to_adversary + 1)
+        
+        # Combine the two components
+        return landmark_reward + 0.5 * adversary_penalty  # Weighted sum
+
 
     def adversary_reward(self, agent, world):
-        # keep the nearest good agents away from the goal
+        # Adversary's reward: Negative of the good agent's reward
         agent_dist = [
             np.sqrt(np.sum(np.square(a.state.p_pos - a.goal_a.state.p_pos)))
             for a in world.agents
             if not a.adversary
         ]
         pos_rew = min(agent_dist)
-        # nearest_agent = world.good_agents[np.argmin(agent_dist)]
-        # neg_rew = np.sqrt(np.sum(np.square(nearest_agent.state.p_pos - agent.state.p_pos)))
         neg_rew = np.sqrt(
             np.sum(np.square(agent.goal_a.state.p_pos - agent.state.p_pos))
         )
-        # neg_rew = sum([np.sqrt(np.sum(np.square(a.state.p_pos - agent.state.p_pos))) for a in world.good_agents])
-        return pos_rew - neg_rew
+        return -(pos_rew - neg_rew)  # Opposite of good agent's reward
+    
+    def reward(self, agent, world):
+        # Agents are rewarded based on whether they are adversaries or not
+        return (
+            -self.agent_reward(agent, world)  # Adversary's reward is negative of agent's
+            if agent.adversary
+            else self.agent_reward(agent, world)
+        )
+
+    # def reward(self, agent, world):
+    #     # Agents are rewarded based on minimum agent distance to each landmark
+    #     return (
+    #         self.adversary_reward(agent, world)
+    #         if agent.adversary
+    #         else self.agent_reward(agent, world)
+    #     )
+
+    # def agent_reward(self, agent, world):
+    #     # the distance to the goal
+    #     return -np.sqrt(np.sum(np.square(agent.state.p_pos - agent.goal_a.state.p_pos)))
+
+    # def adversary_reward(self, agent, world):
+    #     # keep the nearest good agents away from the goal
+    #     agent_dist = [
+    #         np.sqrt(np.sum(np.square(a.state.p_pos - a.goal_a.state.p_pos)))
+    #         for a in world.agents
+    #         if not a.adversary
+    #     ]
+    #     pos_rew = min(agent_dist)
+    #     # nearest_agent = world.good_agents[np.argmin(agent_dist)]
+    #     # neg_rew = np.sqrt(np.sum(np.square(nearest_agent.state.p_pos - agent.state.p_pos)))
+    #     neg_rew = np.sqrt(
+    #         np.sum(np.square(agent.goal_a.state.p_pos - agent.state.p_pos))
+    #     )
+    #     # neg_rew = sum([np.sqrt(np.sum(np.square(a.state.p_pos - agent.state.p_pos))) for a in world.good_agents])
+    #     return pos_rew - neg_rew
 
     def observation(self, agent, world):
         # get positions of all entities in this agent's reference frame

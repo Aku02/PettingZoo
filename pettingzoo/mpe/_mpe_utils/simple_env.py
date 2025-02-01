@@ -302,33 +302,23 @@ class SimpleEnv(AECEnv):
         all_poses = [entity.state.p_pos for entity in self.world.entities]
         cam_range = np.max(np.abs(np.array(all_poses)))
 
-        # The scaling factor is used for dynamic rescaling of the rendering - a.k.a Zoom In/Zoom Out effect
-        # The 0.9 is a factor to keep the entities from appearing "too" out-of-bounds
-        scaling_factor = 0.9 * self.original_cam_range / cam_range
-
         # update geometry and text positions
         text_line = 0
         for e, entity in enumerate(self.world.entities):
             # geometry
             x, y = entity.state.p_pos
-            y *= (
-                -1
-            )  # this makes the display mimic the old pyglet setup (ie. flips image)
-            x = (
-                (x / cam_range) * self.width // 2 * 0.9
-            )  # the .9 is just to keep entities from appearing "too" out-of-bounds
-            y = (y / cam_range) * self.height // 2 * 0.9
+            y *= -1  # this makes the display mimic the old pyglet setup (ie. flips image)
+            x = ((x / cam_range) * self.width // 2 * 0.9)  # scale and center position
+            y = ((y / cam_range) * self.height // 2 * 0.9)
             x += self.width // 2
             y += self.height // 2
 
-            # 350 is an arbitrary scale factor to get pygame to render similar sizes as pyglet
-            if self.dynamic_rescaling:
-                radius = entity.size * 350 * scaling_factor
-            else:
-                radius = entity.size * 350
+            # scale radius based on cam_range
+            radius = (entity.size * 350) / cam_range  # consistent scaling of size
 
-            pygame.draw.circle(self.screen, entity.color * 200, (x, y), radius)
-            pygame.draw.circle(self.screen, (0, 0, 0), (x, y), radius, 1)  # borders
+            pygame.draw.circle(self.screen, entity.color * 200, (int(x), int(y)), int(radius))
+            pygame.draw.circle(self.screen, (0, 0, 0), (int(x), int(y)), int(radius), 1)  # borders
+
             assert (
                 0 < x < self.width and 0 < y < self.height
             ), f"Coordinates {(x, y)} are out of bounds."
